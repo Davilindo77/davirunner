@@ -3,32 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Davi Jump | Nervoso</title>
+    <title>Davi Jump | Ultra Edition</title>
     <style>
-        :root { --bg: #0b0f1a; --accent: #ff4757; --text: #ffffff; }
-        body.light-mode { --bg: #f8fafc; --accent: #e84118; --text: #1e293b; }
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg); font-family: sans-serif; }
-        
-        #gameCanvas { display: block; }
-        
-        .ui { position: absolute; top: 20px; width: 100%; text-align: center; color: var(--text); z-index: 10; pointer-events: none; font-weight: 900; font-size: 24px; text-shadow: 2px 2px 0px #000; }
-
-        #menu {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(22, 27, 43, 0.95); padding: 40px; border-radius: 30px;
-            text-align: center; z-index: 100; border: 4px solid var(--accent); color: white;
+        :root {
+            --bg: #05070a;
+            --card: rgba(22, 27, 43, 0.9);
+            --accent: #6366f1;
+            --danger: #ff4757;
+            --text: #ffffff;
         }
-        .btn { background: var(--accent); color: white; border: none; padding: 15px 40px; border-radius: 50px; font-size: 20px; font-weight: bold; cursor: pointer; margin-top: 20px; box-shadow: 0 5px 15px rgba(255, 71, 87, 0.4); }
+
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            overflow: hidden; font-family: 'Inter', sans-serif;
+            background: var(--bg); color: var(--text);
+        }
+
+        /* --- BACKGROUND PARALLAX --- */
+        #bg-canvas { position: fixed; top: 0; left: 0; z-index: -1; }
+
+        /* --- TELA INICIAL --- */
+        #mainMenu {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center;
+            align-items: center; z-index: 200; transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .hero-card {
+            background: var(--card); padding: 40px; border-radius: 40px;
+            backdrop-filter: blur(20px); text-align: center;
+            border: 1px solid rgba(255,255,255,0.1); width: 85%; max-width: 380px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .profile-container {
+            position: relative; width: 130px; height: 130px; margin: 0 auto 20px;
+        }
+
+        .profile-img {
+            width: 100%; height: 100%; border-radius: 35px;
+            object-fit: cover; border: 4px solid var(--accent);
+        }
+
+        .highscore-badge {
+            background: var(--accent); color: white; padding: 6px 15px;
+            border-radius: 50px; font-size: 12px; font-weight: 800;
+            display: inline-block; margin-bottom: 20px;
+        }
+
+        .btn-start {
+            background: var(--accent); color: white; border: none;
+            width: 100%; padding: 20px; border-radius: 20px;
+            font-size: 1.3rem; font-weight: 900; cursor: pointer;
+            transition: 0.2s; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .btn-start:active { transform: scale(0.95); }
+
+        /* --- GAME UI --- */
+        #gameCanvas { display: none; cursor: pointer; }
+        .hud {
+            position: absolute; top: 30px; width: 100%;
+            display: none; justify-content: space-around;
+            pointer-events: none; z-index: 100; font-weight: 900;
+        }
+
     </style>
 </head>
 <body>
 
-    <div class="ui">PONTOS: <span id="score">0</span> | RECORDE: <span id="high">0</span></div>
+    <canvas id="bg-canvas"></canvas>
 
-    <div id="menu">
-        <h1 style="margin:0">DAVI JUMP</h1>
-        <p id="msg">Toque para desviar das caras bravas!</p>
-        <button class="btn" onclick="startGame()">COMEÇAR</button>
+    <div id="mainMenu">
+        <div class="hero-card">
+            <div class="profile-container">
+                <img src="5021535940282886753.jpg" class="profile-img">
+            </div>
+            <h1 style="margin:0; font-size: 2.2rem;">DAVI JUMP</h1>
+            <div class="highscore-badge">RECORDE: <span id="highText">0</span></div>
+            <button class="btn-start" onclick="play()">JOGAR</button>
+        </div>
+    </div>
+
+    <div class="hud" id="hud">
+        <div style="font-size: 24px;">SCORE: <span id="scoreText">0</span></div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -36,128 +93,135 @@
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    let gameActive = false;
-    let score = 0;
+    const bgCanvas = document.getElementById('bg-canvas');
+    const bgCtx = bgCanvas.getContext('2d');
+    
     let highScore = localStorage.getItem('daviJumpScore') || 0;
-    document.getElementById('high').innerText = highScore;
+    document.getElementById('highText').innerText = highScore;
 
-    // Carregar Imagem do Davi
     const daviImg = new Image();
     daviImg.src = '5021535940282886753.jpg';
 
-    let davi = { x: 50, y: 300, w: 70, h: 70, dy: 0, gravity: 0.6, jump: -10 };
+    let gameActive = false;
+    let score = 0;
+    let davi = { x: 70, y: 0, w: 65, h: 65, dy: 0, gravity: 0.55, jump: -9 };
     let obstacles = [];
+    let particles = [];
     let frame = 0;
 
-    function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+    function init() {
+        bgCanvas.width = canvas.width = window.innerWidth;
+        bgCanvas.height = canvas.height = window.innerHeight;
+        for(let i=0; i<50; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 2,
+                speed: Math.random() * 0.5 + 0.1
+            });
+        }
     }
-    window.addEventListener('resize', resize);
-    resize();
+    window.addEventListener('resize', init);
+    init();
 
-    function startGame() {
-        davi.y = canvas.height / 2;
-        davi.dy = 0;
-        score = 0;
-        obstacles = [];
+    function play() {
+        document.getElementById('mainMenu').style.transform = 'translateY(-100%)';
+        canvas.style.display = 'block';
+        document.getElementById('hud').style.display = 'flex';
+        reset();
+    }
+
+    function reset() {
+        davi.y = canvas.height/2; davi.dy = 0;
+        score = 0; obstacles = []; frame = 0;
         gameActive = true;
-        document.getElementById('menu').style.display = 'none';
+        document.getElementById('scoreText').innerText = "0";
     }
 
-    function gameOver() {
+    function die() {
         gameActive = false;
-        document.getElementById('menu').style.display = 'block';
-        document.getElementById('msg').innerText = "Fim de jogo! Fez " + Math.floor(score) + " pontos.";
         if(score > highScore) {
             highScore = Math.floor(score);
             localStorage.setItem('daviJumpScore', highScore);
-            document.getElementById('high').innerText = highScore;
+            document.getElementById('highText').innerText = highScore;
         }
+        document.getElementById('mainMenu').style.transform = 'translateY(0)';
+        document.querySelector('h1').innerText = "GAME OVER";
     }
 
-    // Pulo
-    const doJump = () => { if(gameActive) davi.dy = davi.jump; if(navigator.vibrate) navigator.vibrate(30); };
-    window.addEventListener('touchstart', (e) => { e.preventDefault(); doJump(); });
-    window.addEventListener('mousedown', doJump);
-
-    function update() {
-        if (!gameActive) return;
-
-        frame++;
-        davi.dy += davi.gravity;
-        davi.y += davi.dy;
-
-        if (davi.y + davi.h > canvas.height || davi.y < 0) gameOver();
-
-        // Criar obstáculos
-        if (frame % 80 === 0) {
-            let gap = 220;
-            let minH = 50;
-            let maxH = canvas.height - gap - 100;
-            let height = Math.random() * maxH + minH;
-            obstacles.push({ x: canvas.width, y: 0, w: 60, h: height, type: 'top' });
-            obstacles.push({ x: canvas.width, y: height + gap, w: 60, h: canvas.height, type: 'bottom' });
+    function jump() {
+        if(gameActive) {
+            davi.dy = davi.jump;
+            if(navigator.vibrate) navigator.vibrate(20);
         }
-
-        obstacles.forEach((obs, i) => {
-            obs.x -= 6;
-
-            // Colisão precisa
-            if (davi.x < obs.x + obs.w && davi.x + davi.w > obs.x &&
-                davi.y < obs.y + obs.h && davi.y + davi.h > obs.y) {
-                gameOver();
-            }
-
-            if (obs.x + obs.w < 0) {
-                obstacles.splice(i, 1);
-                score += 0.5;
-                document.getElementById('score').innerText = Math.floor(score);
-            }
-        });
     }
+    window.addEventListener('mousedown', jump);
+    window.addEventListener('touchstart', (e) => { e.preventDefault(); jump(); });
 
-    function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Desenhar Davi
+    function drawDavi() {
         ctx.save();
         ctx.beginPath();
         ctx.arc(davi.x + davi.w/2, davi.y + davi.h/2, davi.w/2, 0, Math.PI*2);
-        ctx.closePath();
         ctx.clip();
-        // Desenha a imagem. Se não carregar, desenha um emoji
-        if (daviImg.complete) {
-            ctx.drawImage(daviImg, davi.x, davi.y, davi.w, davi.h);
-        } else {
-            ctx.font = "50px serif";
-            ctx.fillText("😎", davi.x, davi.y + 50);
+        if(daviImg.complete) {
+            const scale = Math.max(davi.w / daviImg.width, davi.h / daviImg.height);
+            const x = (davi.w - daviImg.width * scale) / 2;
+            const y = (davi.h - daviImg.height * scale) / 2;
+            ctx.drawImage(daviImg, davi.x + x, davi.y + y, daviImg.width * scale, daviImg.height * scale);
         }
         ctx.restore();
-
-        // Desenhar Obstáculos (Cara de Bravo)
-        obstacles.forEach(obs => {
-            // Desenha o corpo do obstáculo
-            ctx.fillStyle = "#ff4757";
-            ctx.beginPath();
-            ctx.roundRect(obs.x, obs.y, obs.w, obs.h, 15);
-            ctx.fill();
-            
-            // Desenha a carinha brava no meio do obstáculo
-            ctx.fillStyle = "white";
-            ctx.font = "30px Arial";
-            let faceY = obs.type === 'top' ? obs.h - 30 : obs.y + 40;
-            ctx.fillText("😠", obs.x + 10, faceY);
-        });
-
-        update();
-        requestAnimationFrame(draw);
     }
 
-    // Polyfill para navegadores antigos
-    if (!ctx.roundRect) ctx.roundRect = function(x,y,w,h,r) { this.rect(x,y,w,h); };
+    function loop() {
+        // Background Parallax
+        bgCtx.fillStyle = '#05070a';
+        bgCtx.fillRect(0, 0, canvas.width, canvas.height);
+        bgCtx.fillStyle = 'white';
+        particles.forEach(p => {
+            p.y += p.speed;
+            if(p.y > canvas.height) p.y = 0;
+            bgCtx.fillRect(p.x, p.y, p.size, p.size);
+        });
 
-    draw();
+        if(gameActive) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            frame++;
+            davi.dy += davi.gravity;
+            davi.y += davi.dy;
+
+            if(davi.y + davi.h > canvas.height || davi.y < 0) die();
+
+            if(frame % 95 === 0) {
+                let gap = 210;
+                let h = Math.random() * (canvas.height - gap - 160) + 80;
+                obstacles.push({ x: canvas.width, y: 0, w: 70, h: h, type: 't' });
+                obstacles.push({ x: canvas.width, y: h + gap, w: 70, h: canvas.height, type: 'b' });
+            }
+
+            obstacles.forEach((o, i) => {
+                o.x -= 5.5;
+                // Colisão
+                if(davi.x < o.x + o.w && davi.x + davi.w > o.x && davi.y < o.y + o.h && davi.y + davi.h > o.y) die();
+                
+                // Desenho Obstáculo
+                ctx.fillStyle = "#6366f1";
+                ctx.beginPath();
+                if(ctx.roundRect) ctx.roundRect(o.x, o.y, o.w, o.h, 15); else ctx.rect(o.x, o.y, o.w, o.h);
+                ctx.fill();
+                ctx.font = "30px Arial";
+                ctx.fillText("😠", o.x + 18, o.type === 't' ? o.h - 30 : o.y + 45);
+
+                if(o.x + o.w < 0) { 
+                    obstacles.splice(i, 1); 
+                    score += 0.5; 
+                    document.getElementById('scoreText').innerText = Math.floor(score);
+                }
+            });
+            drawDavi();
+        }
+        requestAnimationFrame(loop);
+    }
+    loop();
 </script>
 </body>
 </html>
