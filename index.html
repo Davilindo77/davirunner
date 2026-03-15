@@ -7,25 +7,67 @@
     <style>
         body { margin: 0; overflow: hidden; background: #05070a; font-family: 'Arial Black', sans-serif; }
         canvas { display: block; }
+        
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; z-index: 20; color: white; text-align: center;
+        }
+
+        #startScreen {
+            background: linear-gradient(rgba(5, 7, 10, 0.7), rgba(5, 7, 10, 0.7)), 
+                        url('https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=2071&auto=format&fit=crop');
+            background-size: cover; background-position: center;
+        }
+
+        #gameOverScreen { background: rgba(5, 7, 10, 0.92); display: none; }
+
+        .btn-acao {
+            background: #6366f1; color: white; border: none;
+            padding: 20px 60px; border-radius: 25px; font-size: 28px;
+            font-weight: bold; cursor: pointer; transition: 0.3s;
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.6);
+            margin-top: 25px; text-transform: uppercase;
+        }
+
+        .btn-acao:hover { transform: scale(1.1); background: #4f46e5; }
+
         #ui { 
             position: absolute; top: 20px; left: 20px; color: white; 
-            text-shadow: 2px 2px #000; pointer-events: none; z-index: 10;
+            text-shadow: 2px 2px #000; pointer-events: none; z-index: 5;
+            display: none; 
         }
+
         .btn-voltar { 
             position: absolute; top: 20px; right: 20px; 
-            background: rgba(99, 102, 241, 0.5); color: white; 
-            padding: 12px 20px; border-radius: 15px; 
-            text-decoration: none; font-weight: bold; border: 2px solid #6366f1;
-            z-index: 10; transition: 0.3s;
+            background: rgba(0, 0, 0, 0.5); color: white; 
+            padding: 10px 20px; border-radius: 12px; 
+            text-decoration: none; font-size: 14px; border: 1px solid #6366f1;
+            z-index: 30; backdrop-filter: blur(5px);
         }
-        .btn-voltar:hover { background: #6366f1; }
     </style>
 </head>
 <body>
-    <a href="index.html" class="btn-voltar">🏠 MENU</a>
+    <a href="index.html" class="btn-voltar">🏠 SAIR</a>
+
+    <audio id="snd-jump" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
+    <audio id="snd-hit" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"></audio>
+
+    <div id="startScreen" class="overlay">
+        <h1 style="font-size: 4rem; margin: 0; letter-spacing: -3px; text-shadow: 0 0 20px #6366f1;">DAVI JUMP</h1>
+        <p style="font-size: 1.2rem; opacity: 0.8;">Pressione ESPAÇO ou toque na tela!</p>
+        <button class="btn-acao" onclick="startGame()">INICIAR</button>
+    </div>
+
+    <div id="gameOverScreen" class="overlay">
+        <h1 style="font-size: 3.5rem; color: #ff4757; margin: 0;">FIM DE JOGO</h1>
+        <p style="font-size: 1.5rem; margin: 10px 0;">PONTOS: <span id="finalScore">0</span></p>
+        <p style="font-size: 1rem; color: #10b981;">MELHOR: <span id="bestScore">0</span></p>
+        <button class="btn-acao" onclick="startGame()">RECOMEÇAR</button>
+    </div>
+
     <div id="ui">
         <div style="font-size: 28px;">PONTOS: <span id="score">0</span></div>
-        <div style="font-size: 14px; color: #10b981;">RECORDE: <span id="hiscore">0</span></div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -33,6 +75,8 @@
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    const sndJump = document.getElementById('snd-jump');
+    const sndHit = document.getElementById('snd-hit');
     
     function resize() {
         canvas.width = window.innerWidth;
@@ -41,72 +85,75 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // Variáveis do Jogo
     let score = 0;
     let hiScore = localStorage.getItem('daviHiScore') || 0;
-    document.getElementById('hiscore').innerText = hiScore;
     let frame = 0;
-    let gameActive = true;
+    let gameActive = false; 
     let obstacles = [];
 
     const daviImg = new Image();
     daviImg.src = 'foto.jpg';
 
     const player = {
-        x: 80,
-        y: 0,
-        size: 80, // Tamanho fixo para o círculo
-        dy: 0,
-        jumpForce: 16,
-        gravity: 0.8,
-        grounded: false,
-        rotation: 0
+        x: 80, y: 0, size: 85, dy: 0, jumpForce: 17, gravity: 0.8, grounded: false, rotation: 0
     };
+
+    function startGame() {
+        document.getElementById('startScreen').style.display = 'none';
+        document.getElementById('gameOverScreen').style.display = 'none';
+        document.getElementById('ui').style.display = 'block';
+        score = 0;
+        obstacles = [];
+        frame = 0;
+        player.y = canvas.height - 200;
+        player.dy = 0;
+        gameActive = true;
+    }
+
+    function triggerGameOver() {
+        if(!gameActive) return;
+        gameActive = false;
+        sndHit.currentTime = 0;
+        sndHit.play().catch(()=>{});
+        
+        if(score > hiScore) {
+            hiScore = score;
+            localStorage.setItem('daviHiScore', hiScore);
+        }
+        document.getElementById('finalScore').innerText = score;
+        document.getElementById('bestScore').innerText = hiScore;
+        document.getElementById('gameOverScreen').style.display = 'flex';
+    }
 
     function drawPlayer() {
         ctx.save();
         ctx.translate(player.x + player.size/2, player.y + player.size/2);
         ctx.rotate(player.rotation);
-
-        // Brilho Neon
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = "#6366f1";
-
-        // Círculo de Recorte (Impede de achatar)
-        ctx.beginPath();
-        ctx.arc(0, 0, player.size/2, 0, Math.PI * 2);
-        ctx.clip();
+        ctx.shadowBlur = 25; ctx.shadowColor = "#6366f1";
+        ctx.beginPath(); ctx.arc(0, 0, player.size/2, 0, Math.PI * 2); ctx.clip();
 
         if (daviImg.complete) {
-            // Lógica "Cover" para não achatar
             let imgRatio = daviImg.width / daviImg.height;
-            let drawW, drawH;
-            if (imgRatio > 1) {
-                drawH = player.size;
-                drawW = player.size * imgRatio;
-            } else {
-                drawW = player.size;
-                drawH = player.size / imgRatio;
-            }
+            let drawW = imgRatio > 1 ? player.size * imgRatio : player.size;
+            let drawH = imgRatio > 1 ? player.size : player.size / imgRatio;
             ctx.drawImage(daviImg, -drawW/2, -drawH/2, drawW, drawH);
         } else {
-            ctx.fillStyle = "#6366f1";
-            ctx.fill();
+            ctx.fillStyle = "#6366f1"; ctx.fill();
         }
         ctx.restore();
     }
 
-    function createObstacle() {
-        // Alterna entre obstáculos no chão e no ar
-        const isAir = Math.random() > 0.7;
-        obstacles.push({
-            x: canvas.width,
-            y: isAir ? canvas.height - 250 : canvas.height - 145,
-            w: 50,
-            h: 50,
-            speed: 8 + (score / 150),
-            color: isAir ? "#f59e0b" : "#ff4757"
-        });
+    function drawEnemy(obs) {
+        ctx.save();
+        ctx.shadowBlur = 15; ctx.shadowColor = obs.color;
+        ctx.fillStyle = obs.color;
+        ctx.beginPath(); ctx.roundRect(obs.x, obs.y, obs.w, obs.h, 12); ctx.fill();
+        ctx.fillStyle = "white";
+        ctx.fillRect(obs.x + 12, obs.y + 15, 8, 8);
+        ctx.fillRect(obs.x + 30, obs.y + 15, 8, 8);
+        ctx.strokeStyle = "white"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(obs.x+15, obs.y+35); ctx.lineTo(obs.x+35, obs.y+35); ctx.stroke();
+        ctx.restore();
     }
 
     function update() {
@@ -117,80 +164,55 @@
 
         const floorY = canvas.height - 100 - player.size;
         if (player.y > floorY) {
-            player.y = floorY;
-            player.dy = 0;
-            player.grounded = true;
-            player.rotation = 0;
+            player.y = floorY; player.dy = 0; player.grounded = true; player.rotation = 0;
         } else {
-            player.rotation += 0.1; // Gira no ar
+            player.rotation += 0.12;
         }
 
-        // Criar obstáculos em ondas
         if (frame % 70 === 0) {
-            createObstacle();
+            const isAir = Math.random() > 0.85;
+            obstacles.push({
+                x: canvas.width, y: isAir ? canvas.height - 260 : canvas.height - 150,
+                w: 55, h: 55, speed: 8.5 + (score / 150), color: isAir ? "#f59e0b" : "#ff4757"
+            });
         }
 
         obstacles.forEach((obs, i) => {
             obs.x -= obs.speed;
-            
-            // Colisão Precisa
-            if (player.x + 10 < obs.x + obs.w && 
-                player.x + player.size - 10 > obs.x && 
-                player.y + 10 < obs.y + obs.h && 
-                player.y + player.size - 10 > obs.y) {
-                
-                gameActive = false;
-                if(score > hiScore) localStorage.setItem('daviHiScore', score);
-                alert("GAME OVER! Pontos: " + score);
-                location.reload();
+            if (player.x + 20 < obs.x + obs.w && player.x + player.size - 20 > obs.x && 
+                player.y + 20 < obs.y + obs.h && player.y + player.size - 20 > obs.y) {
+                triggerGameOver();
             }
-
-            if(obs.x + obs.w < 0) {
-                obstacles.splice(i, 1);
-                score += 10;
-            }
+            if(obs.x + obs.w < 0) { obstacles.splice(i, 1); score += 10; }
         });
         frame++;
     }
 
     function draw() {
-        // Fundo
-        ctx.fillStyle = "#05070a";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Chão Estiloso
-        ctx.fillStyle = "#161b2b";
-        ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
-        ctx.fillStyle = "#6366f1";
-        ctx.fillRect(0, canvas.height - 105, canvas.width, 5);
+        ctx.fillStyle = "#05070a"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#161b2b"; ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
+        ctx.fillStyle = "#6366f1"; ctx.fillRect(0, canvas.height - 105, canvas.width, 5);
 
-        // Obstáculos
-        obstacles.forEach(obs => {
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = obs.color;
-            ctx.fillStyle = obs.color;
-            ctx.beginPath();
-            ctx.roundRect(obs.x, obs.y, obs.w, obs.h, 10);
-            ctx.fill();
-        });
-        ctx.shadowBlur = 0;
-
-        drawPlayer();
+        obstacles.forEach(obs => drawEnemy(obs));
+        if (gameActive || document.getElementById('gameOverScreen').style.display === 'flex') {
+            drawPlayer();
+        }
         update();
         document.getElementById('score').innerText = score;
         requestAnimationFrame(draw);
     }
 
-    // Comandos
-    const jumpAction = () => {
-        if(player.grounded) {
-            player.dy = -player.jumpForce;
-            player.grounded = false;
-        }
+    const jumpAction = () => { 
+        if(player.grounded && gameActive) { 
+            player.dy = -player.jumpForce; 
+            player.grounded = false; 
+            sndJump.currentTime = 0;
+            sndJump.volume = 0.3;
+            sndJump.play().catch(()=>{});
+        } 
     };
-
-    window.addEventListener('keydown', (e) => { if(e.code === 'Space') jumpAction(); });
-    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); jumpAction(); });
+    window.addEventListener('keydown', (e) => { if(e.code === 'Space' || e.code === 'ArrowUp') jumpAction(); });
+    canvas.addEventListener('touchstart', (e) => { if(gameActive) { e.preventDefault(); jumpAction(); } });
 
     draw();
 </script>
