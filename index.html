@@ -3,40 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Davi Jump | God Mode</title>
+    <title>Davi Jump | Magnet Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background: #020205; font-family: 'Arial Black', sans-serif; }
         canvas { display: block; }
         .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 20; color: white; text-align: center; }
         #startScreen { background: radial-gradient(circle, #1a1a2e 0%, #020205 100%); }
-        #gameOverScreen { background: rgba(30, 0, 0, 0.9); display: none; backdrop-filter: blur(10px); }
-        .btn-acao { background: #6366f1; color: white; border: none; padding: 15px 45px; border-radius: 50px; font-size: 22px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 20px rgba(99, 102, 241, 0.5); transition: 0.2s; text-transform: uppercase; }
-        .btn-acao:hover { transform: scale(1.1); background: #ff4757; }
+        #gameOverScreen { background: rgba(0, 0, 0, 0.9); display: none; backdrop-filter: blur(15px); }
+        .btn-acao { background: #6366f1; color: white; border: none; padding: 15px 45px; border-radius: 50px; font-size: 22px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 20px rgba(99, 102, 241, 0.5); }
         #ui { position: absolute; top: 20px; left: 20px; color: white; z-index: 5; display: none; }
-        .hp { color: #ff4757; font-size: 26px; margin-left: 20px; }
-        .ability { font-size: 12px; color: #00fbff; margin-top: 5px; font-style: italic; display: none; }
+        .stats-row { display: flex; align-items: center; gap: 20px; }
+        .hp { color: #ff4757; font-size: 24px; }
+        .coins { color: #ffd700; font-size: 24px; text-shadow: 0 0 10px #ffd700; }
+        #magnetTimer { color: #00fbff; font-size: 18px; display: none; font-style: italic; }
     </style>
 </head>
 <body>
     <audio id="snd-jump" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
-    <audio id="snd-hit" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"></audio>
+    <audio id="snd-coin" src="https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3"></audio>
 
     <div id="startScreen" class="overlay">
-        <h1 style="font-size: 4.5rem; margin: 0; text-shadow: 0 0 30px #6366f1;">DAVI JUMP</h1>
-        <p style="letter-spacing: 5px; color: #00fbff;">PULO DUPLO LIBERA NO LEVEL 10</p>
-        <button class="btn-acao" onclick="startGame()">INICIAR</button>
+        <h1 style="font-size: 4rem; margin: 0;">DAVI <span style="color:#00fbff">MAGNET</span> JUMP</h1>
+        <p>PEGUE O ÍMÃ PARA PUXAR AS MOEDAS!</p>
+        <button class="btn-acao" onclick="startGame()">CONECTAR</button>
     </div>
 
     <div id="gameOverScreen" class="overlay">
-        <h1 style="color: #ff4757; font-size: 4rem; margin: 0;">FIM DA LINHA</h1>
-        <p style="font-size: 1.5rem;">SCORE: <span id="finalScore">0</span></p>
-        <button class="btn-acao" onclick="startGame()">RECONECTAR</button>
+        <h1 style="color: #ff4757; font-size: 4rem;">GAME OVER</h1>
+        <p>SCORE: <span id="finalScore">0</span></p>
+        <button class="btn-acao" onclick="startGame()">REINICIAR</button>
     </div>
 
     <div id="ui">
-        <span style="font-size: 30px; font-weight: 900;">SCORE: <span id="score">0</span></span>
-        <span id="hpDisplay" class="hp">❤️❤️❤️</span>
-        <div id="doubleJumpMsg" class="ability">PULO DUPLO ATIVADO!</div>
+        <div class="stats-row">
+            <span style="font-size: 28px;">PTS: <span id="score">0</span></span>
+            <span id="hpDisplay" class="hp">❤️❤️❤️</span>
+        </div>
+        <div class="coins">🪙 <span id="coinDisplay">0</span> / 50</div>
+        <div id="magnetTimer">🧲 ÍMÃ ATIVO!</div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -45,82 +49,107 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const sndJump = document.getElementById('snd-jump');
-    const sndHit = document.getElementById('snd-hit');
+    const sndCoin = document.getElementById('snd-coin');
     
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     window.addEventListener('resize', resize); resize();
 
-    let score = 0, frame = 0, gameActive = false, level = 1, hp = 3;
-    let obstacles = [], particles = [];
-    let jumpCount = 0; // Para controlar o pulo duplo
-    const daviImg = new Image(); daviImg.src = 'foto.jpg';
+    let score = 0, frame = 0, gameActive = false, level = 1, hp = 3, coins = 0;
+    let obstacles = [], particles = [], collectibles = [], powers = [], jumpCount = 0;
+    let magnetActive = 0; // Timer do ímã em frames
 
-    const player = { x: 120, y: 0, size: 85, dy: 0, jumpForce: 18, gravity: 0.85, grounded: false };
+    const daviImg = new Image(); daviImg.src = 'foto.jpg';
+    const player = { x: 120, y: 0, size: 85, dy: 0, jumpForce: 19, gravity: 0.85, grounded: false };
 
     function startGame() {
         document.querySelectorAll('.overlay').forEach(el => el.style.display = 'none');
         document.getElementById('ui').style.display = 'block';
-        score = 0; level = 1; hp = 3; obstacles = []; particles = []; frame = 0; jumpCount = 0;
-        updateHP(); gameActive = true;
+        score = 0; level = 1; hp = 3; coins = 0; magnetActive = 0;
+        obstacles = []; collectibles = []; powers = []; particles = []; frame = 0;
+        updateUI(); gameActive = true;
     }
 
-    function updateHP() {
+    function updateUI() {
         document.getElementById('hpDisplay').innerText = "❤️".repeat(hp);
+        document.getElementById('coinDisplay').innerText = coins;
+        document.getElementById('score').innerText = score;
+        document.getElementById('magnetTimer').style.display = magnetActive > 0 ? "block" : "none";
         if(hp <= 0) { gameActive = false; document.getElementById('finalScore').innerText = score; document.getElementById('gameOverScreen').style.display = 'flex'; }
     }
 
-    function createParticles(x, y, color, count, speed, sizeMult = 1) {
+    function createParticles(x, y, color, count) {
         for(let i=0; i<count; i++) {
-            particles.push({
-                x, y, vx: (Math.random() - 0.5) * speed, vy: (Math.random() - 0.5) * speed,
-                size: (Math.random() * 5 + 2) * sizeMult, life: 1.0, color
-            });
+            particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, size: Math.random()*5+2, life: 1.0, color });
         }
-    }
-
-    function drawDavi() {
-        ctx.save();
-        ctx.translate(player.x + player.size/2, player.y + player.size/2);
-        if(!player.grounded) ctx.rotate(frame * 0.2);
-        ctx.shadowBlur = score > 1000 ? 40 : 20; 
-        ctx.shadowColor = score > 1000 ? "#ff4700" : "#6366f1";
-        ctx.beginPath(); ctx.arc(0, 0, player.size/2, 0, Math.PI*2); ctx.clip();
-        if(daviImg.complete) {
-            const aspect = daviImg.width / daviImg.height;
-            let sw = daviImg.width, sh = daviImg.height, sx = 0, sy = 0;
-            if (aspect > 1) { sw = daviImg.height; sx = (daviImg.width - daviImg.height) / 2; }
-            else { sh = daviImg.width; sy = (daviImg.height - daviImg.width) / 2; }
-            ctx.drawImage(daviImg, sx, sy, sw, sh, -player.size/2, -player.size/2, player.size, player.size);
-        }
-        ctx.restore();
     }
 
     function update() {
         if(!gameActive) return;
         player.dy += player.gravity; player.y += player.dy;
         const floorLimit = canvas.height - 130 - player.size;
+        if (player.y > floorLimit) { player.y = floorLimit; player.dy = 0; player.grounded = true; jumpCount = 0; }
 
-        if (player.y > floorLimit) { 
-            player.y = floorLimit; player.dy = 0; player.grounded = true; jumpCount = 0;
-            if(score > 1000) createParticles(player.x, player.y + player.size - 5, "#ffbc00", 1, 2);
-            else if(frame % 4 === 0) createParticles(player.x, player.y + player.size, "rgba(255,255,255,0.2)", 1, 2);
-        }
-
-        level = Math.floor(score / 500) + 1;
-        if(level >= 10) document.getElementById('doubleJumpMsg').style.display = 'block';
-
-        if (frame % Math.max(25, 80 - level*6) === 0) {
-            const h = [canvas.height-195, canvas.height-290, canvas.height-390];
+        level = Math.floor(score / 1000) + 1;
+        
+        // Spawn Inimigos
+        if (frame % Math.max(30, 80 - level*5) === 0) {
+            const h = [canvas.height-195, canvas.height-285, canvas.height-410];
             const i = Math.floor(Math.random() * 3);
-            obstacles.push({ x: canvas.width, y: h[i], w: 65, h: 50, speed: 9 + level*1.8, color: i === 0 ? "#ff0055" : (i === 1 ? "#00fbff" : "#f59e0b") });
+            obstacles.push({ x: canvas.width, y: h[i], w: 70, h: i === 1 ? 100 : 60, speed: 8 + level*2, color: i === 1 ? "#00fbff" : "#ff0055" });
         }
+
+        // Spawn Moedas
+        if (frame % 80 === 0) {
+            collectibles.push({ x: canvas.width, y: canvas.height - 200 - Math.random()*300, size: 25, angle: 0 });
+        }
+
+        // Spawn Ímã (Raro)
+        if (frame % 1000 === 0) {
+            powers.push({ x: canvas.width, y: canvas.height - 300, size: 40, type: 'magnet' });
+        }
+
+        // Lógica Ímã Ativo
+        if (magnetActive > 0) magnetActive--;
+
+        // Lógica Moedas
+        collectibles.forEach((c, i) => {
+            if(magnetActive > 0) {
+                // Atração magnética
+                let dx = player.x - c.x;
+                let dy = player.y - c.y;
+                c.x += dx * 0.15;
+                c.y += dy * 0.15;
+            } else {
+                c.x -= 7;
+            }
+            c.angle += 0.2;
+            if (player.x < c.x + c.size && player.x + player.size > c.x && player.y < c.y + c.size && player.y + player.size > c.y) {
+                coins++; sndCoin.currentTime = 0; sndCoin.play();
+                createParticles(c.x, c.y, "#ffd700", 5);
+                collectibles.splice(i, 1);
+                if(coins >= 50) { coins = 0; if(hp < 5) hp++; }
+                updateUI();
+            }
+            if(c.x + c.size < 0) collectibles.splice(i, 1);
+        });
+
+        // Lógica Power-ups
+        powers.forEach((p, i) => {
+            p.x -= 8;
+            if (player.x < p.x + p.size && player.x + player.size > p.x && player.y < p.y + p.size && player.y + player.size > p.y) {
+                if(p.type === 'magnet') magnetActive = 480; // 8 segundos a 60fps
+                createParticles(p.x, p.y, "#00fbff", 20);
+                powers.splice(i, 1);
+                updateUI();
+            }
+        });
 
         obstacles.forEach((obs, i) => {
             obs.x -= obs.speed;
             if (player.x + 20 < obs.x + obs.w && player.x + player.size - 20 > obs.x && player.y + 20 < obs.y + obs.h && player.y + player.size - 20 > obs.y) {
-                sndHit.play(); hp--; updateHP(); createParticles(obs.x, obs.y, "orange", 10, 8); obstacles.splice(i, 1);
+                hp--; updateUI(); createParticles(obs.x, obs.y, "red", 15); obstacles.splice(i, 1);
             }
-            if(obs.x + obs.w < 0) { obstacles.splice(i, 1); score += 100; }
+            if(obs.x + obs.w < 0) { obstacles.splice(i, 1); score += 50; updateUI(); }
         });
 
         particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.life -= 0.03; if(p.life <= 0) particles.splice(i, 1); });
@@ -130,35 +159,61 @@
     function draw() {
         ctx.fillStyle = "#020205"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#0a0a1f"; ctx.fillRect(0, canvas.height-130, canvas.width, 130);
-        ctx.fillStyle = score > 1000 ? "#ff4700" : "#6366f1"; ctx.fillRect(0, canvas.height-135, canvas.width, 5);
+        ctx.fillStyle = "#6366f1"; ctx.fillRect(0, canvas.height-135, canvas.width, 5);
+
+        // Desenhar Moedas
+        collectibles.forEach(c => {
+            ctx.save();
+            ctx.translate(c.x + c.size/2, c.y + c.size/2);
+            ctx.scale(Math.sin(c.angle), 1);
+            ctx.fillStyle = "#ffd700";
+            ctx.beginPath(); ctx.arc(0, 0, c.size/2, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        });
+
+        // Desenhar Ímã
+        powers.forEach(p => {
+            ctx.fillStyle = "#00fbff";
+            ctx.shadowBlur = 20; ctx.shadowColor = "#00fbff";
+            ctx.beginPath(); ctx.arc(p.x + p.size/2, p.y + p.size/2, p.size/2, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+        });
+
+        obstacles.forEach(obs => {
+            ctx.fillStyle = obs.color;
+            ctx.beginPath(); ctx.roundRect(obs.x, obs.y, obs.w, obs.h, 10); ctx.fill();
+        });
+
+        // Desenhar Davi + Aura do Ímã
+        ctx.save();
+        ctx.translate(player.x + player.size/2, player.y + player.size/2);
+        if(magnetActive > 0) {
+            ctx.shadowBlur = 30; ctx.shadowColor = "#00fbff";
+            ctx.strokeStyle = "#00fbff"; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.arc(0, 0, player.size/2 + 5, 0, Math.PI*2); ctx.stroke();
+        }
+        ctx.beginPath(); ctx.arc(0, 0, player.size/2, 0, Math.PI*2); ctx.clip();
+        if(daviImg.complete) {
+            const aspect = daviImg.width / daviImg.height;
+            let sw = daviImg.width, sh = daviImg.height, sx = 0, sy = 0;
+            if (aspect > 1) { sw = daviImg.height; sx = (daviImg.width - daviImg.height) / 2; }
+            else { sh = daviImg.width; sy = (daviImg.height - daviImg.width) / 2; }
+            ctx.drawImage(daviImg, sx, sy, sw, sh, -player.size/2, -player.size/2, player.size, player.size);
+        }
+        ctx.restore();
 
         particles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); });
         ctx.globalAlpha = 1;
 
-        obstacles.forEach(obs => {
-            ctx.shadowBlur = 15; ctx.shadowColor = obs.color; ctx.fillStyle = obs.color;
-            ctx.beginPath(); ctx.roundRect(obs.x, obs.y, obs.w, obs.h, 12); ctx.fill();
-            ctx.fillStyle = "black"; ctx.fillRect(obs.x+15, obs.y+15, 8, 8); ctx.fillRect(obs.x+40, obs.y+15, 8, 8);
-        });
-        ctx.shadowBlur = 0;
-        drawDavi(); update();
-        document.getElementById('score').innerText = score;
+        update();
         requestAnimationFrame(draw);
     }
 
     const jump = () => { 
         if(!gameActive) return;
-        // Pulo normal ou Pulo Duplo (se level >= 10)
-        if(player.grounded) {
-            player.dy = -player.jumpForce; player.grounded = false; jumpCount = 1;
-            sndJump.play(); createParticles(player.x + player.size/2, player.y + player.size, "#6366f1", 8, 5);
-        } else if(level >= 10 && jumpCount === 1) {
-            player.dy = -player.jumpForce * 0.85; jumpCount = 2;
-            sndJump.currentTime = 0; sndJump.play();
-            createParticles(player.x + player.size/2, player.y + player.size, "#00fbff", 15, 7, 1.5); // Explosão do pulo duplo
-        }
+        if(player.grounded) { player.dy = -player.jumpForce; player.grounded = false; jumpCount = 1; sndJump.play(); }
+        else if(jumpCount === 1) { player.dy = -player.jumpForce * 0.85; jumpCount = 2; sndJump.currentTime = 0; sndJump.play(); }
     };
-
     window.addEventListener('keydown', (e) => { if(e.code === 'Space') jump(); });
     canvas.addEventListener('touchstart', (e) => { e.preventDefault(); jump(); });
     draw();
