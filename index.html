@@ -3,44 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Davi Jump | Hardcore Combat</title>
+    <title>Davi Jump | God Mode</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #020408; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #020205; font-family: 'Arial Black', sans-serif; }
         canvas { display: block; }
         .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 20; color: white; text-align: center; }
-        #startScreen { background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('https://images.unsplash.com/photo-1614732414444-096e5f1122d5?q=80&w=1974&auto=format&fit=crop'); background-size: cover; }
-        #gameOverScreen { background: rgba(20, 0, 0, 0.95); display: none; backdrop-filter: blur(10px); }
-        .btn-acao { background: #6366f1; color: white; border: none; padding: 18px 50px; border-radius: 50px; font-size: 24px; font-weight: 900; cursor: pointer; transition: 0.3s; margin-top: 20px; box-shadow: 0 0 20px #6366f1; }
-        .btn-acao:hover { transform: scale(1.1); filter: brightness(1.2); }
+        #startScreen { background: radial-gradient(circle, #1a1a2e 0%, #020205 100%); }
+        #gameOverScreen { background: rgba(30, 0, 0, 0.9); display: none; backdrop-filter: blur(10px); }
+        .btn-acao { background: #6366f1; color: white; border: none; padding: 15px 45px; border-radius: 50px; font-size: 22px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 20px rgba(99, 102, 241, 0.5); transition: 0.2s; text-transform: uppercase; }
+        .btn-acao:hover { transform: scale(1.1); background: #ff4757; }
         #ui { position: absolute; top: 20px; left: 20px; color: white; z-index: 5; display: none; }
-        .stats { display: flex; gap: 20px; align-items: center; }
-        .hp-bar { color: #ff4757; font-size: 24px; }
-        .level-badge { background: #6366f1; padding: 5px 15px; border-radius: 20px; font-size: 14px; transition: 0.5s; }
+        .hp { color: #ff4757; font-size: 26px; margin-left: 20px; }
+        .ability { font-size: 12px; color: #00fbff; margin-top: 5px; font-style: italic; display: none; }
     </style>
 </head>
 <body>
     <audio id="snd-jump" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
     <audio id="snd-hit" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"></audio>
-    <audio id="snd-laser" src="https://assets.mixkit.co/active_storage/sfx/2587/2587-preview.mp3"></audio>
 
     <div id="startScreen" class="overlay">
-        <h1 style="font-size: 4rem; margin: 0;">DAVI JUMP <span style="color:#ff4757">EVOLUTION</span></h1>
-        <p>Level 5 destrava o MODO TIRO! Cuidado.</p>
-        <button class="btn-acao" onclick="startGame()">INICIAR COMBATE</button>
+        <h1 style="font-size: 4.5rem; margin: 0; text-shadow: 0 0 30px #6366f1;">DAVI JUMP</h1>
+        <p style="letter-spacing: 5px; color: #00fbff;">PULO DUPLO LIBERA NO LEVEL 10</p>
+        <button class="btn-acao" onclick="startGame()">INICIAR</button>
     </div>
 
     <div id="gameOverScreen" class="overlay">
-        <h1 style="font-size: 4rem; color: #ff4757;">VOCÊ FOI DERROTADO!</h1>
+        <h1 style="color: #ff4757; font-size: 4rem; margin: 0;">FIM DA LINHA</h1>
         <p style="font-size: 1.5rem;">SCORE: <span id="finalScore">0</span></p>
-        <button class="btn-acao" onclick="startGame()">REENTRAR NA LUTA</button>
+        <button class="btn-acao" onclick="startGame()">RECONECTAR</button>
     </div>
 
     <div id="ui">
-        <div class="stats">
-            <div style="font-size: 32px; font-weight: 900;">SCORE: <span id="score">0</span></div>
-            <div id="hpDisplay" class="hp-bar">❤️❤️❤️</div>
-        </div>
-        <div id="levelDisplay" class="level-badge">LEVEL 1</div>
+        <span style="font-size: 30px; font-weight: 900;">SCORE: <span id="score">0</span></span>
+        <span id="hpDisplay" class="hp">❤️❤️❤️</span>
+        <div id="doubleJumpMsg" class="ability">PULO DUPLO ATIVADO!</div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -50,126 +46,121 @@
     const ctx = canvas.getContext('2d');
     const sndJump = document.getElementById('snd-jump');
     const sndHit = document.getElementById('snd-hit');
-    const sndLaser = document.getElementById('snd-laser');
     
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     window.addEventListener('resize', resize); resize();
 
-    let score = 0, hiScore = localStorage.getItem('daviHiScore') || 0, frame = 0;
-    let gameActive = false, level = 1, hp = 3;
-    let obstacles = [], bullets = [], particles = [];
-    const colors = ["#6366f1", "#10b981", "#f59e0b", "#a855f7", "#ff4757", "#00d2ff"];
+    let score = 0, frame = 0, gameActive = false, level = 1, hp = 3;
+    let obstacles = [], particles = [];
+    let jumpCount = 0; // Para controlar o pulo duplo
     const daviImg = new Image(); daviImg.src = 'foto.jpg';
 
-    const player = { x: 100, y: 0, size: 80, dy: 0, jumpForce: 18, gravity: 0.9, grounded: false };
+    const player = { x: 120, y: 0, size: 85, dy: 0, jumpForce: 18, gravity: 0.85, grounded: false };
 
     function startGame() {
         document.querySelectorAll('.overlay').forEach(el => el.style.display = 'none');
         document.getElementById('ui').style.display = 'block';
-        score = 0; level = 1; hp = 3; obstacles = []; bullets = []; frame = 0;
+        score = 0; level = 1; hp = 3; obstacles = []; particles = []; frame = 0; jumpCount = 0;
         updateHP(); gameActive = true;
     }
 
     function updateHP() {
         document.getElementById('hpDisplay').innerText = "❤️".repeat(hp);
-        if(hp <= 0) gameOver();
+        if(hp <= 0) { gameActive = false; document.getElementById('finalScore').innerText = score; document.getElementById('gameOverScreen').style.display = 'flex'; }
     }
 
-    function gameOver() {
-        gameActive = false;
-        sndHit.play();
-        document.getElementById('finalScore').innerText = score;
-        document.getElementById('gameOverScreen').style.display = 'flex';
+    function createParticles(x, y, color, count, speed, sizeMult = 1) {
+        for(let i=0; i<count; i++) {
+            particles.push({
+                x, y, vx: (Math.random() - 0.5) * speed, vy: (Math.random() - 0.5) * speed,
+                size: (Math.random() * 5 + 2) * sizeMult, life: 1.0, color
+            });
+        }
+    }
+
+    function drawDavi() {
+        ctx.save();
+        ctx.translate(player.x + player.size/2, player.y + player.size/2);
+        if(!player.grounded) ctx.rotate(frame * 0.2);
+        ctx.shadowBlur = score > 1000 ? 40 : 20; 
+        ctx.shadowColor = score > 1000 ? "#ff4700" : "#6366f1";
+        ctx.beginPath(); ctx.arc(0, 0, player.size/2, 0, Math.PI*2); ctx.clip();
+        if(daviImg.complete) {
+            const aspect = daviImg.width / daviImg.height;
+            let sw = daviImg.width, sh = daviImg.height, sx = 0, sy = 0;
+            if (aspect > 1) { sw = daviImg.height; sx = (daviImg.width - daviImg.height) / 2; }
+            else { sh = daviImg.width; sy = (daviImg.height - daviImg.width) / 2; }
+            ctx.drawImage(daviImg, sx, sy, sw, sh, -player.size/2, -player.size/2, player.size, player.size);
+        }
+        ctx.restore();
     }
 
     function update() {
         if(!gameActive) return;
         player.dy += player.gravity; player.y += player.dy;
-        const floorY = canvas.height - 120 - player.size;
-        if (player.y > floorY) { player.y = floorY; player.dy = 0; player.grounded = true; }
+        const floorLimit = canvas.height - 130 - player.size;
 
-        level = Math.floor(score / 200) + 1;
-        let theme = colors[(level - 1) % colors.length];
-        document.getElementById('levelDisplay').innerText = "LEVEL " + level;
-        document.getElementById('levelDisplay').style.background = theme;
-
-        // Spawn Inimigos
-        if (frame % Math.max(20, 60 - level*4) === 0) {
-            const isAir = Math.random() > 0.7;
-            obstacles.push({ x: canvas.width, y: isAir ? canvas.height-280 : canvas.height-170, w: 50, h: 50, speed: 8 + level*1.5, color: isAir ? "#fff" : theme, canShoot: isAir && level >= 5 });
+        if (player.y > floorLimit) { 
+            player.y = floorLimit; player.dy = 0; player.grounded = true; jumpCount = 0;
+            if(score > 1000) createParticles(player.x, player.y + player.size - 5, "#ffbc00", 1, 2);
+            else if(frame % 4 === 0) createParticles(player.x, player.y + player.size, "rgba(255,255,255,0.2)", 1, 2);
         }
 
-        // Lógica de Tiros (Inimigos atiram)
-        obstacles.forEach(obs => {
-            if(obs.canShoot && frame % 100 === 0) {
-                bullets.push({ x: obs.x, y: obs.y + 25, vx: -12, size: 15 });
-                sndLaser.currentTime = 0; sndLaser.play();
-            }
-        });
+        level = Math.floor(score / 500) + 1;
+        if(level >= 10) document.getElementById('doubleJumpMsg').style.display = 'block';
 
-        // Update Obstáculos
+        if (frame % Math.max(25, 80 - level*6) === 0) {
+            const h = [canvas.height-195, canvas.height-290, canvas.height-390];
+            const i = Math.floor(Math.random() * 3);
+            obstacles.push({ x: canvas.width, y: h[i], w: 65, h: 50, speed: 9 + level*1.8, color: i === 0 ? "#ff0055" : (i === 1 ? "#00fbff" : "#f59e0b") });
+        }
+
         obstacles.forEach((obs, i) => {
             obs.x -= obs.speed;
-            if (player.x < obs.x + obs.w && player.x + player.size > obs.x && player.y < obs.y + obs.h && player.y + player.size > obs.y) {
-                gameOver(); // Bater no corpo é morte instantânea
+            if (player.x + 20 < obs.x + obs.w && player.x + player.size - 20 > obs.x && player.y + 20 < obs.y + obs.h && player.y + player.size - 20 > obs.y) {
+                sndHit.play(); hp--; updateHP(); createParticles(obs.x, obs.y, "orange", 10, 8); obstacles.splice(i, 1);
             }
-            if(obs.x + obs.w < 0) { obstacles.splice(i, 1); score += 20; }
+            if(obs.x + obs.w < 0) { obstacles.splice(i, 1); score += 100; }
         });
 
-        // Update Balas (Dano de tiro tira 1 vida)
-        bullets.forEach((b, i) => {
-            b.x += b.vx;
-            if (player.x < b.x + b.size && player.x + player.size > b.x && player.y < b.y + b.size && player.y + player.size > b.y) {
-                bullets.splice(i, 1); hp--; updateHP();
-            }
-            if(b.x < 0) bullets.splice(i, 1);
-        });
-
+        particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.life -= 0.03; if(p.life <= 0) particles.splice(i, 1); });
         frame++;
     }
 
     function draw() {
-        ctx.fillStyle = "#020408"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Chão Neon
-        let theme = colors[(level - 1) % colors.length];
-        ctx.fillStyle = "#0f172a"; ctx.fillRect(0, canvas.height-120, canvas.width, 120);
-        ctx.shadowBlur = 15; ctx.shadowColor = theme;
-        ctx.fillStyle = theme; ctx.fillRect(0, canvas.height-125, canvas.width, 5);
+        ctx.fillStyle = "#020205"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#0a0a1f"; ctx.fillRect(0, canvas.height-130, canvas.width, 130);
+        ctx.fillStyle = score > 1000 ? "#ff4700" : "#6366f1"; ctx.fillRect(0, canvas.height-135, canvas.width, 5);
 
-        // Desenhar Tiros
-        bullets.forEach(b => {
-            ctx.shadowBlur = 15; ctx.shadowColor = "#ff4757";
-            ctx.fillStyle = "#ff4757"; ctx.fillRect(b.x, b.y, b.size, 5);
-        });
+        particles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); });
+        ctx.globalAlpha = 1;
 
-        // Desenhar Inimigos
         obstacles.forEach(obs => {
-            ctx.shadowBlur = 10; ctx.shadowColor = obs.color;
-            ctx.fillStyle = obs.color; ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
-            if(obs.canShoot) { // Arma do inimigo
-                ctx.fillStyle = "red"; ctx.fillRect(obs.x-10, obs.y+20, 15, 10);
-            }
+            ctx.shadowBlur = 15; ctx.shadowColor = obs.color; ctx.fillStyle = obs.color;
+            ctx.beginPath(); ctx.roundRect(obs.x, obs.y, obs.w, obs.h, 12); ctx.fill();
+            ctx.fillStyle = "black"; ctx.fillRect(obs.x+15, obs.y+15, 8, 8); ctx.fillRect(obs.x+40, obs.y+15, 8, 8);
         });
-
-        // Desenhar Davi
-        ctx.save();
-        ctx.translate(player.x + player.size/2, player.y + player.size/2);
-        if(!player.grounded) ctx.rotate(frame*0.1);
-        ctx.shadowBlur = 20; ctx.shadowColor = theme;
-        ctx.beginPath(); ctx.arc(0,0, player.size/2, 0, Math.PI*2); ctx.clip();
-        if(daviImg.complete) ctx.drawImage(daviImg, -player.size/2, -player.size/2, player.size, player.size);
-        ctx.restore();
-
-        update();
+        ctx.shadowBlur = 0;
+        drawDavi(); update();
         document.getElementById('score').innerText = score;
         requestAnimationFrame(draw);
     }
 
-    const jump = () => { if(player.grounded && gameActive) { player.dy = -player.jumpForce; player.grounded = false; sndJump.play(); } };
+    const jump = () => { 
+        if(!gameActive) return;
+        // Pulo normal ou Pulo Duplo (se level >= 10)
+        if(player.grounded) {
+            player.dy = -player.jumpForce; player.grounded = false; jumpCount = 1;
+            sndJump.play(); createParticles(player.x + player.size/2, player.y + player.size, "#6366f1", 8, 5);
+        } else if(level >= 10 && jumpCount === 1) {
+            player.dy = -player.jumpForce * 0.85; jumpCount = 2;
+            sndJump.currentTime = 0; sndJump.play();
+            createParticles(player.x + player.size/2, player.y + player.size, "#00fbff", 15, 7, 1.5); // Explosão do pulo duplo
+        }
+    };
+
     window.addEventListener('keydown', (e) => { if(e.code === 'Space') jump(); });
     canvas.addEventListener('touchstart', (e) => { e.preventDefault(); jump(); });
-
     draw();
 </script>
 </body>
